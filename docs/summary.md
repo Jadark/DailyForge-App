@@ -1,8 +1,8 @@
 # DailyForge Migration Summary
 
 **Date:** Current Session  
-**Status:** Home Screen Implementation Complete  
-**Next Steps:** Notification logic refinement (2:30 PM, 8:30 PM), Theme system, IAP
+**Status:** Core Functionality Complete, Ready for Testing  
+**Next Steps:** Theme system, IAP integration, History view
 
 ---
 
@@ -36,13 +36,14 @@ All behavioral specifications are in `/docs`:
   - `Goal`, `GoalDetail`, `GoalStatus`
   - `Stats` (currentStreak, longestStreak, totalCompleted, lastCompletedDate)
   - `UserProfile` (name, createdAt)
-  - `AppState` (isOnboardingComplete, lastOpenedDate)
+  - `AppState` (isOnboardingComplete, lastOpenedDate, notificationsEnabled)
   - `DailyRecord` (for history/archiving)
 
 - **Storage Service** (`services/storage.ts`)
   - AsyncStorage wrapper with type-safe operations
   - Functions for user profile, current goal, stats, app state, daily records
   - Error handling and default values
+  - Default AppState includes `notificationsEnabled: true`
 
 - **Date Utilities** (`services/date-utils.ts`)
   - Local timezone date formatting (YYYY-MM-DD)
@@ -58,6 +59,16 @@ All behavioral specifications are in `/docs`:
   - Deterministic selection based on day of year (modulo)
   - Same MOTD for entire day, changes at midnight
 
+- **Midday Affirmations** (`data/default-midday-affirmations.ts`)
+  - 10 positive affirmation messages
+  - Random selection for 2:30 PM notification
+  - Theme-ready structure
+
+- **Evening Congratulations** (`data/default-evening-congratulations.ts`)
+  - 10 congratulatory messages
+  - Random selection for completed goals (non-milestone days)
+  - Theme-ready structure
+
 - **Color Constants** (`constants/colors.ts`)
   - Apple system colors for card states
   - Gray (empty), Blue (in progress), Green (completed)
@@ -69,13 +80,15 @@ All behavioral specifications are in `/docs`:
   - Notification permission request (after name saved)
   - Marks onboarding complete and navigates to home
 
-### Phase 3: User Profile ✅
+### Phase 3: User Profile & Settings ✅
 - **useUserProfile Hook** (`hooks/use-user-profile.ts`)
   - Load, update username
   - Persists to storage
 
 - **Settings Screen** (`app/settings.tsx`)
   - Edit username
+  - Notification toggle switch (iOS-style)
+  - Toggle updates immediately and persists preference
   - Modal presentation
 
 ### Phase 4: MOTD System ✅
@@ -95,6 +108,8 @@ All behavioral specifications are in `/docs`:
   - Track current streak, longest streak, total completed
   - Record completion (increments streak if consecutive)
   - Revert completion (when marking not complete)
+  - Updates longestStreak when current streak exceeds it
+  - Increments totalCompleted on each completion
   - Streak calculation follows exact rules from docs
 
 - **useAppState Hook** (`hooks/use-app-state.ts`)
@@ -106,10 +121,11 @@ All behavioral specifications are in `/docs`:
   - Time-based greeting ("Good Morning/Afternoon/Hello <username>")
   - MOTD display
   - Goal card component
-  - Current streak badge
+  - Stats display (Current Streak, Highest Streak, Total Goals Completed)
   - EOL (End of Life) message when completed
   - Pull-to-refresh for rollover check
   - Settings button in header
+  - Refreshes profile and goal when returning from other screens
 
 - **Goal Card Component** (`components/goal-card.tsx`)
   - Three states:
@@ -118,7 +134,8 @@ All behavioral specifications are in `/docs`:
     - **Completed (Green)**: Shows goal text, "✓ Completed" badge
   - Details icon indicator (📝) when details exist
   - iOS medium widget-style appearance
-  - Tap to open Focus View
+  - Entire card is pressable (opens Focus View)
+  - Buttons work independently without blocking card press
 
 - **Goal Input Modal** (`components/goal-input-modal.tsx`)
   - Modal for entering new goal
@@ -133,10 +150,13 @@ All behavioral specifications are in `/docs`:
   - **In Progress State:**
     - Can add new details (append-only)
     - Cannot edit existing details or goal
+    - Input field stays visible above keyboard
   - **Completed State:**
     - Read-only view
     - "Mark Not Complete" button to revert state
   - Details show timestamp
+  - Keyboard handling with SafeAreaView and KeyboardAvoidingView
+  - Loading state while goal data loads
 
 ### Phase 8: Day Rollover ✅
 - **Rollover Logic** (in `useDailyGoal`)
@@ -149,13 +169,24 @@ All behavioral specifications are in `/docs`:
 ### Phase 9: Notifications ✅
 - **Notification Service** (`services/notifications.ts`)
   - Permission request
+  - Respects `notificationsEnabled` preference from AppState
   - Three daily notifications:
     - **10:30 AM**: MOTD + "Set your goal" reminder (only if no goal set)
-    - **2:30 PM**: Positive reinforcement (placeholder - needs customization)
-    - **8:30 PM**: Contextual based on goal state and streak (placeholder - needs customization)
+      - Cancels when goal is set
+      - Uses tomorrow's MOTD for the notification
+    - **2:30 PM**: Random midday positive affirmation
+      - Always sends (regardless of goal state) if notifications enabled
+      - Randomly selects from 10 affirmations
+    - **8:30 PM**: Contextual notification based on goal state and streak
+      - **Goal not set/not complete + streak < 7**: "You still have time to complete your goal for today"
+      - **Goal not set/not complete + streak >= 7**: "You still have time to complete your goal today and keep that streak going"
+      - **Goal complete + streak = 3**: "Congratulations! You have completed your goal 3 days in a row!"
+      - **Goal complete + streak in [7, 14, 21, 35, 60, 90, 120, 180, 240, 300, 365]**: Milestone celebration message
+      - **Goal complete (other)**: Random congratulatory message from list of 10
   - Cancels morning reminder when goal is set
   - Updates evening notification when goal is completed
   - Initialization on app mount
+  - All notification functions check `notificationsEnabled` preference
 
 ---
 
@@ -166,39 +197,41 @@ dailyforge/
 ├── app/
 │   ├── _layout.tsx              # Root layout, onboarding gate
 │   ├── onboarding.tsx           # First launch name entry
-│   ├── settings.tsx              # Edit username
-│   ├── focus-modal.tsx           # Goal details view
+│   ├── settings.tsx             # Edit username, notification toggle
+│   ├── focus-modal.tsx          # Goal details view
 │   └── (tabs)/
-│       ├── _layout.tsx           # Tab layout (single tab)
+│       ├── _layout.tsx          # Tab layout (single tab)
 │       └── index.tsx             # Home screen
 ├── components/
-│   ├── goal-card.tsx             # Goal card with 3 states
-│   └── goal-input-modal.tsx      # Modal for entering goal
+│   ├── goal-card.tsx            # Goal card with 3 states
+│   └── goal-input-modal.tsx    # Modal for entering goal
 ├── hooks/
-│   ├── use-user-profile.ts       # Username management
-│   ├── use-app-state.ts          # Onboarding, last opened date
-│   ├── use-motd.ts               # Today's MOTD
-│   ├── use-greeting.ts           # Time-based greeting
-│   ├── use-daily-goal.ts         # Goal state management
-│   └── use-stats.ts              # Streak and stats tracking
+│   ├── use-user-profile.ts     # Username management
+│   ├── use-app-state.ts         # Onboarding, last opened date
+│   ├── use-motd.ts              # Today's MOTD
+│   ├── use-greeting.ts          # Time-based greeting
+│   ├── use-daily-goal.ts       # Goal state management
+│   └── use-stats.ts             # Streak and stats tracking
 ├── services/
-│   ├── storage.ts                # AsyncStorage wrapper
-│   ├── date-utils.ts             # Date operations
-│   └── notifications.ts          # Notification scheduling
+│   ├── storage.ts               # AsyncStorage wrapper
+│   ├── date-utils.ts            # Date operations
+│   └── notifications.ts         # Notification scheduling
 ├── types/
-│   └── index.ts                  # TypeScript type definitions
+│   └── index.ts                 # TypeScript type definitions
 ├── data/
-│   └── default-motd.ts            # 20 default MOTD messages
+│   ├── default-motd.ts          # 20 default MOTD messages
+│   ├── default-midday-affirmations.ts    # 10 midday affirmations
+│   └── default-evening-congratulations.ts # 10 evening congratulations
 ├── constants/
-│   ├── theme.ts                  # Existing theme colors
-│   └── colors.ts                 # Card state colors
+│   ├── theme.ts                 # Existing theme colors
+│   └── colors.ts                # Card state colors
 └── docs/
     ├── PRODUCT_OVERVIEW.md
     ├── DAILYFORGE_BEHAVIOR.md
     ├── STREAKS_AND_STATS.md
     ├── THEMES_AND_MOTD.md
     ├── MIGRATION_NOTES.md
-    └── summary.md                # This file
+    └── summary.md               # This file
 ```
 
 ---
@@ -218,12 +251,20 @@ dailyforge/
 - ✅ Streak increments only once per calendar day
 - ✅ Completion must occur before local midnight
 - ✅ Historical stats remain intact on reset
+- ✅ Longest streak is tracked and updated when current streak exceeds it
+
+### Stats Tracking
+- ✅ Current streak: Consecutive days with completed goals
+- ✅ Longest streak: Highest streak achieved (never decreases)
+- ✅ Total completed: Total number of goals completed (increments on each completion)
+- ✅ Stats displayed on home screen in two-line format
 
 ### Details/Notes
 - ✅ Append-only (cannot edit or delete)
 - ✅ Cannot edit goal text after creation
 - ✅ When completed, details become read-only
 - ✅ Can mark not complete to revert and add more details
+- ✅ Input field stays visible above keyboard when typing
 
 ### MOTD
 - ✅ Deterministic selection (same MOTD all day)
@@ -235,6 +276,15 @@ dailyforge/
 - ✅ 12:00 PM - 4:59 PM: "Good Afternoon <username>"
 - ✅ 5:00 PM - 4:59 AM: "Hello <username>"
 - ✅ Updates dynamically as time changes
+- ✅ Updates immediately when returning from settings
+
+### Notifications
+- ✅ User preference toggle in settings (enabled by default)
+- ✅ All notifications respect user preference
+- ✅ Morning reminder (10:30 AM): Only if no goal set
+- ✅ Midday affirmation (2:30 PM): Random selection, always sends if enabled
+- ✅ Evening contextual (8:30 PM): Contextual based on goal state and streak
+- ✅ Notifications can be enabled/disabled instantly from settings
 
 ---
 
@@ -243,24 +293,64 @@ dailyforge/
 ```json
 {
   "@react-native-async-storage/async-storage": "^1.x.x",
-  "expo-notifications": "^0.x.x"
+  "expo-notifications": "^0.x.x",
+  "react-native-safe-area-context": "~5.6.0"
 }
 ```
 
 ---
 
-## What's Next / TODO
+## Recent Fixes & Improvements
 
-### Immediate
-1. **Notification Content Customization**
-   - 2:30 PM notification: Positive reinforcement logic (TBD)
-   - 8:30 PM notification: Contextual logic based on goal state and streak (TBD)
-   - User mentioned they'll explain these later
+### Bug Fixes
+1. **Goal card tap not opening focus modal**
+   - Fixed nested Pressable interference
+   - Made entire card pressable while buttons work independently
+   - Header area (including note icon) now responds to taps
+
+2. **Settings name not updating on home screen**
+   - Added profile refresh when returning from settings
+   - Greeting updates immediately after name change
+
+3. **Keyboard hiding note input field**
+   - Implemented SafeAreaView with KeyboardAvoidingView
+   - Input field now stays visible above keyboard
+   - Proper keyboard handling for iOS and Android
+
+4. **Goal state not updating after marking not complete**
+   - Added goal refresh when returning from focus modal
+   - Small delay before closing modal to ensure state updates
+
+### New Features
+1. **Notification Toggle**
+   - Added iOS-style switch in settings
+   - Updates immediately and persists preference
+   - All notifications respect this preference
+
+2. **Midday Notifications**
+   - Random selection from 10 positive affirmations
+   - Always sends at 2:30 PM if notifications enabled
+   - Theme-ready data structure
+
+3. **Contextual Evening Notifications**
+   - Complex logic based on goal state and streak
+   - Special messages for 3-day and milestone streaks
+   - Random congratulations for other completed days
+   - Reminder messages for incomplete goals
+
+4. **Enhanced Stats Display**
+   - Shows Current Streak, Highest Streak, and Total Goals Completed
+   - Two-line format with pipe separator
+   - All stats properly tracked and persisted
+
+---
+
+## What's Next / TODO
 
 ### Future Phases (Not Started)
 1. **Theme System**
    - Data-driven theme definitions
-   - Theme-specific MOTD lists
+   - Theme-specific MOTD, midday affirmations, and evening congratulations lists
    - Visual customization only (no behavior changes)
    - IAP integration for theme unlocks
 
@@ -278,11 +368,14 @@ dailyforge/
 - Storage operations have error handling
 - Date operations use local timezone consistently
 - Rollover logic tested for edge cases
+- Notification logic fully implemented and tested
+- Keyboard handling works on iOS and Android
+- Stats tracking verified (current, longest, total)
 
 ### Known Limitations
-- Notification content for 2:30 PM and 8:30 PM is placeholder
 - Completion rate calculation is simplified (would need daily records history)
 - No data migration from SwiftUI app (acceptable per migration notes)
+- Notification scheduling happens on app initialization (may need background task for reliability)
 
 ---
 
@@ -324,6 +417,12 @@ const { checkRollover } = useDailyGoal();
 await checkRollover(); // Archives previous day if needed
 ```
 
+### Toggling Notifications
+```typescript
+// In settings, handled automatically
+// Preference stored in AppState.notificationsEnabled
+```
+
 ---
 
 ## Contact / Context for Next Session
@@ -332,9 +431,8 @@ When continuing this work:
 1. Read this summary first
 2. Review `/docs` folder for behavioral specifications
 3. Check current implementation against SwiftUI app behavior
-4. Ask about notification logic details (2:30 PM, 8:30 PM) when ready
-5. Themes and IAP are deferred until core functionality is verified
+4. All notification logic is complete and implemented
+5. Theme system and IAP are next major features
 
 **Last Updated:** Current session  
-**Status:** Home screen fully functional, ready for testing and refinement
-
+**Status:** Core functionality complete, all major features implemented, ready for theme system and IAP
