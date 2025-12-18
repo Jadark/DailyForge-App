@@ -1,98 +1,326 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+/**
+ * Home Screen
+ * 
+ * Main screen displaying:
+ * - Time-based greeting with username
+ * - Message of the Day (MOTD)
+ * - Goal card (empty/in-progress/completed)
+ * - Current streak
+ */
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { GoalCard } from '@/components/goal-card';
+import { GoalInputModal } from '@/components/goal-input-modal';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useDailyGoal } from '@/hooks/use-daily-goal';
+import { useGreeting } from '@/hooks/use-greeting';
+import { useMOTD } from '@/hooks/use-motd';
+import { useStats } from '@/hooks/use-stats';
+import { useUserProfile } from '@/hooks/use-user-profile';
+import {
+  initializeNotifications,
+  updateNotificationsOnGoalComplete,
+  updateNotificationsOnGoalSet,
+} from '@/services/notifications';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const { profile, isLoading: profileLoading, refresh: refreshProfile } = useUserProfile();
+  const { greeting } = useGreeting(profile?.name ?? '');
+  const { motd } = useMOTD();
+  const {
+    goal,
+    isLoading: goalLoading,
+    setGoal,
+    markComplete,
+    checkRollover,
+    refresh: refreshGoal,
+  } = useDailyGoal();
+  const { stats, recordCompletion, refresh: refreshStats } = useStats();
+
+  const [showGoalInput, setShowGoalInput] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Check for day rollover on mount and focus
+  useFocusEffect(
+    useCallback(() => {
+      checkRollover();
+      // Refresh profile when screen comes into focus (e.g., returning from settings)
+      refreshProfile();
+      // Refresh goal when returning from focus modal
+      refreshGoal();
+    }, [checkRollover, refreshProfile, refreshGoal])
+  );
+
+  // Initialize notifications on mount (only once)
+  useEffect(() => {
+    initializeNotifications(false, false, 0);
+  }, []);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await checkRollover();
+    await refreshGoal();
+    await refreshStats();
+    setIsRefreshing(false);
+  };
+
+  const handleCardPress = () => {
+    console.log('[HomeScreen] Card pressed, goal:', goal ? 'exists' : 'null');
+    if (!goal) {
+      // No goal set, show input modal
+      setShowGoalInput(true);
+    } else {
+      // Goal exists, open focus modal
+      console.log('[HomeScreen] Navigating to focus-modal, goal:', goal);
+      try {
+        router.push('/focus-modal' as any);
+      } catch (error) {
+        console.error('[HomeScreen] Navigation error:', error);
+      }
+    }
+  };
+
+  const handleAddDetails = () => {
+    if (goal) {
+      router.push('/focus-modal');
+    }
+  };
+
+  const handleComplete = async () => {
+    const success = await markComplete();
+    if (success) {
+      await recordCompletion();
+      // Update notifications for completion
+      await updateNotificationsOnGoalComplete(stats.currentStreak + 1);
+    }
+  };
+
+  const handleSetGoal = async (text: string) => {
+    const success = await setGoal(text);
+    if (success) {
+      // Cancel morning reminder since goal is now set
+      await updateNotificationsOnGoalSet();
+    }
+  };
+
+  const isLoading = profileLoading || goalLoading;
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, isDark && styles.containerDark]}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>
+            Loading...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.container, isDark && styles.containerDark]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={isDark ? '#FFFFFF' : '#000000'}
+          />
+        }
+      >
+        {/* Header with Settings */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft} />
+          <Pressable
+            onPress={() => router.push('/settings')}
+            style={styles.settingsButton}
+          >
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
+        </View>
+
+        {/* Greeting */}
+        <Text style={[styles.greeting, isDark && styles.greetingDark]}>
+          {greeting}
+        </Text>
+
+        {/* MOTD */}
+        <Text style={[styles.motd, isDark && styles.motdDark]}>
+          {motd}
+        </Text>
+
+        {/* Goal Card */}
+        <View style={styles.cardContainer}>
+          <GoalCard
+            goal={goal}
+            onPress={handleCardPress}
+            onComplete={handleComplete}
+            onAddDetails={handleAddDetails}
+          />
+        </View>
+
+        {/* Stats (Current Streak) */}
+        {stats.currentStreak > 0 && (
+          <View style={styles.statsContainer}>
+            <View style={[styles.statBadge, isDark && styles.statBadgeDark]}>
+              <Text style={styles.streakIcon}>🔥</Text>
+              <Text style={[styles.streakText, isDark && styles.streakTextDark]}>
+                {stats.currentStreak} day{stats.currentStreak !== 1 ? 's' : ''} streak
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* EOL Message (when completed) */}
+        {goal?.status === 'completed' && (
+          <View style={styles.eolContainer}>
+            <Text style={[styles.eolText, isDark && styles.eolTextDark]}>
+              Done for today! 🎉
+            </Text>
+            <Text style={[styles.eolSubtext, isDark && styles.eolSubtextDark]}>
+              Rest up and come back tomorrow
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Goal Input Modal */}
+      <GoalInputModal
+        visible={showGoalInput}
+        onClose={() => setShowGoalInput(false)}
+        onSubmit={handleSetGoal}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  stepContainer: {
-    gap: 8,
+  containerDark: {
+    backgroundColor: '#000000',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 17,
+    color: '#8E8E93',
+  },
+  loadingTextDark: {
+    color: '#8E8E93',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  headerLeft: {
+    width: 44,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsIcon: {
+    fontSize: 24,
+  },
+  greeting: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  greetingDark: {
+    color: '#FFFFFF',
+  },
+  motd: {
+    fontSize: 17,
+    color: '#8E8E93',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  motdDark: {
+    color: '#8E8E93',
+  },
+  cardContainer: {
+    marginBottom: 20,
+  },
+  statsContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    gap: 6,
+  },
+  statBadgeDark: {
+    backgroundColor: '#3D2A1A',
+  },
+  streakIcon: {
+    fontSize: 16,
+  },
+  streakText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#E65100',
+  },
+  streakTextDark: {
+    color: '#FFB74D',
+  },
+  eolContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  eolText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#34C759',
+    marginBottom: 4,
+  },
+  eolTextDark: {
+    color: '#30D158',
+  },
+  eolSubtext: {
+    fontSize: 15,
+    color: '#8E8E93',
+  },
+  eolSubtextDark: {
+    color: '#8E8E93',
   },
 });
