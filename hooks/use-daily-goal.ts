@@ -5,29 +5,32 @@
  * Handles creation, completion, and rollover.
  */
 
-import { useState, useEffect, useCallback } from 'react';
 import {
-  getCurrentGoal,
-  setCurrentGoal,
-  clearCurrentGoal,
-  addDailyRecord,
-  getAppState,
-  setAppState,
-} from '@/services/storage';
-import { Goal, GoalDetail, GoalStatus } from '@/types';
-import {
-  getLocalDateString,
   getISOTimestamp,
-  isToday,
+  getLocalDateString,
   hasRolledOver,
+  isToday,
 } from '@/services/date-utils';
+import {
+  addDailyRecord,
+  clearCurrentGoal,
+  getAppState,
+  getCurrentGoal,
+  getStats,
+  setAppState,
+  setCurrentGoal,
+  setStats,
+} from '@/services/storage';
+import { Goal, GoalDetail, GoalTag } from '@/types';
+import { useCallback, useEffect, useState } from 'react';
 
 interface UseDailyGoalReturn {
   goal: Goal | null;
   isLoading: boolean;
   hasGoalToday: boolean;
   isCompleted: boolean;
-  setGoal: (text: string) => Promise<boolean>;
+  setGoal: (text: string, tag?: GoalTag) => Promise<boolean>;
+  updateTag: (tag: GoalTag) => Promise<boolean>;
   markComplete: () => Promise<boolean>;
   markNotComplete: () => Promise<boolean>;
   addDetail: (text: string) => Promise<boolean>;
@@ -50,7 +53,12 @@ export function useDailyGoal(): UseDailyGoalReturn {
       
       // Check if goal is from today
       if (data && isToday(data.date)) {
-        setGoalState(data);
+        // Ensure tag exists for backward compatibility
+        const goalWithTag: Goal = {
+          ...data,
+          tag: data.tag || 'general',
+        };
+        setGoalState(goalWithTag);
       } else {
         // Goal is from a previous day, clear it
         setGoalState(null);
@@ -68,6 +76,7 @@ export function useDailyGoal(): UseDailyGoalReturn {
 
   /**
    * Check for day rollover and archive previous goal if needed
+   * Also increments tag counts for the archived goal
    */
   const checkRollover = useCallback(async (): Promise<boolean> => {
     try {
@@ -83,6 +92,19 @@ export function useDailyGoal(): UseDailyGoalReturn {
             goal: currentGoal,
             completed: currentGoal.status === 'completed',
           });
+
+          // Increment tag count for the goal's tag (or general if no tag - backward compatibility)
+          const stats = await getStats();
+          const tagToIncrement: GoalTag = (currentGoal.tag as GoalTag) || 'general';
+          const updatedStats = {
+            ...stats,
+            tagCounts: {
+              ...stats.tagCounts,
+              [tagToIncrement]: (stats.tagCounts[tagToIncrement] || 0) + 1,
+            },
+          };
+          await setStats(updatedStats);
+
           await clearCurrentGoal();
           setGoalState(null);
         }
@@ -106,7 +128,7 @@ export function useDailyGoal(): UseDailyGoalReturn {
   /**
    * Set a new goal for today
    */
-  const setGoal = useCallback(async (text: string): Promise<boolean> => {
+  const setGoal = useCallback(async (text: string, tag: GoalTag = 'general'): Promise<boolean> => {
     const trimmedText = text.trim();
     if (trimmedText.length === 0) return false;
 
@@ -117,6 +139,7 @@ export function useDailyGoal(): UseDailyGoalReturn {
       date: today,
       status: 'in_progress',
       details: [],
+      tag,
       createdAt: getISOTimestamp(),
     };
 
@@ -126,6 +149,27 @@ export function useDailyGoal(): UseDailyGoalReturn {
     }
     return success;
   }, []);
+
+  /**
+   * Update the tag for the current goal
+   * Only allowed if goal is in progress and from today
+   */
+  const updateTag = useCallback(async (tag: GoalTag): Promise<boolean> => {
+    if (!goal || goal.status === 'completed' || !isToday(goal.date)) {
+      return false;
+    }
+
+    const updatedGoal: Goal = {
+      ...goal,
+      tag,
+    };
+
+    const success = await setCurrentGoal(updatedGoal);
+    if (success) {
+      setGoalState(updatedGoal);
+    }
+    return success;
+  }, [goal]);
 
   /**
    * Mark the current goal as complete
@@ -198,6 +242,7 @@ export function useDailyGoal(): UseDailyGoalReturn {
     hasGoalToday: goal !== null && isToday(goal.date),
     isCompleted: goal?.status === 'completed',
     setGoal,
+    updateTag,
     markComplete,
     markNotComplete,
     addDetail,

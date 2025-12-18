@@ -5,43 +5,53 @@
  * Appears when tapping the empty goal card.
  */
 
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GoalTag } from '@/types';
 import { useState } from 'react';
 import {
-  View,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
   Text,
   TextInput,
-  StyleSheet,
-  Modal,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from 'react-native';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface GoalInputModalProps {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (goal: string) => void;
+  onSubmit: (goal: string, tag: GoalTag) => void;
 }
 
 export function GoalInputModal({ visible, onClose, onSubmit }: GoalInputModalProps) {
   const [text, setText] = useState('');
+  const [selectedTag, setSelectedTag] = useState<GoalTag>('general');
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
 
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (trimmed.length > 0) {
-      onSubmit(trimmed);
+      onSubmit(trimmed, selectedTag);
       setText('');
+      setSelectedTag('general');
       onClose();
     }
   };
 
   const handleClose = () => {
     setText('');
+    setSelectedTag('general');
     onClose();
   };
+
+  const tagOptions: { value: GoalTag; label: string }[] = [
+    { value: 'general', label: 'General' },
+    { value: 'personal_health', label: 'Personal/Health' },
+    { value: 'work_school', label: 'Work/School' },
+  ];
 
   return (
     <Modal
@@ -92,6 +102,39 @@ export function GoalInputModal({ visible, onClose, onSubmit }: GoalInputModalPro
             textAlignVertical="top"
           />
           <Text style={styles.charCount}>{text.length}/200</Text>
+        </View>
+
+        {/* Tag Selection */}
+        <View style={styles.tagContainer}>
+          {tagOptions.map((option) => {
+            const isSelected = selectedTag === option.value;
+            const isGeneral = option.value === 'general';
+            return (
+              <Pressable
+                key={option.value}
+                style={({ pressed }) => [
+                  styles.tagPill,
+                  isSelected && styles.tagPillSelected,
+                  isDark && styles.tagPillDark,
+                  isSelected && isDark && styles.tagPillSelectedDark,
+                  pressed && styles.tagPillPressed,
+                ]}
+                onPress={() => setSelectedTag(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.tagText,
+                    isSelected && styles.tagTextSelected,
+                    isDark && styles.tagTextDark,
+                    isSelected && isDark && styles.tagTextSelectedDark,
+                    isGeneral && isSelected && styles.tagTextBold,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Hint */}
@@ -167,6 +210,52 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     paddingHorizontal: 16,
     lineHeight: 20,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  tagPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#C6C6C8',
+    backgroundColor: '#F2F2F7',
+  },
+  tagPillDark: {
+    borderColor: '#38383A',
+    backgroundColor: '#1C1C1E',
+  },
+  tagPillSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#E3F2FD',
+  },
+  tagPillSelectedDark: {
+    borderColor: '#0A84FF',
+    backgroundColor: '#1C1C1E',
+  },
+  tagPillPressed: {
+    opacity: 0.7,
+  },
+  tagText: {
+    fontSize: 15,
+    color: '#000000',
+  },
+  tagTextDark: {
+    color: '#FFFFFF',
+  },
+  tagTextSelected: {
+    color: '#007AFF',
+  },
+  tagTextSelectedDark: {
+    color: '#0A84FF',
+  },
+  tagTextBold: {
+    fontWeight: '600',
   },
 });
 

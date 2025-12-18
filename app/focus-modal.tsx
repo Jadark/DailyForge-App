@@ -9,7 +9,8 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useDailyGoal } from '@/hooks/use-daily-goal';
 import { useStats } from '@/hooks/use-stats';
-import { GoalDetail } from '@/types';
+import { isToday } from '@/services/date-utils';
+import { GoalDetail, GoalTag } from '@/types';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -29,8 +30,11 @@ export default function FocusModal() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   
-  const { goal, isCompleted, addDetail, markNotComplete, isLoading } = useDailyGoal();
+  const { goal, isCompleted, addDetail, markNotComplete, updateTag, isLoading } = useDailyGoal();
   const { revertCompletion } = useStats();
+
+  // Check if tag can be changed (not completed and from today)
+  const canChangeTag = goal && !isCompleted && isToday(goal.date);
 
   console.log('[FocusModal] Rendering, isLoading:', isLoading, 'goal:', goal ? 'exists' : 'null');
 
@@ -91,6 +95,18 @@ export default function FocusModal() {
     return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
+  const tagOptions: { value: GoalTag; label: string }[] = [
+    { value: 'general', label: 'General' },
+    { value: 'personal_health', label: 'Personal/Health' },
+    { value: 'work_school', label: 'Work/School' },
+  ];
+
+  const handleTagChange = async (tag: GoalTag) => {
+    if (canChangeTag) {
+      await updateTag(tag);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, isDark && styles.containerDark]} edges={['bottom']}>
       <KeyboardAvoidingView
@@ -119,6 +135,47 @@ export default function FocusModal() {
               <Text style={styles.completedText}>✓ Completed</Text>
             </View>
           )}
+
+          {/* Tag Selection */}
+          <View style={styles.tagContainer}>
+            <Text style={[styles.tagLabel, isDark && styles.tagLabelDark]}>
+              Category
+            </Text>
+            <View style={styles.tagPillsContainer}>
+              {tagOptions.map((option) => {
+                const isSelected = (goal.tag || 'general') === option.value;
+                const isGeneral = option.value === 'general';
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={({ pressed }) => [
+                      styles.tagPill,
+                      isSelected && styles.tagPillSelected,
+                      isDark && styles.tagPillDark,
+                      isSelected && isDark && styles.tagPillSelectedDark,
+                      !canChangeTag && styles.tagPillDisabled,
+                      pressed && canChangeTag && styles.tagPillPressed,
+                    ]}
+                    onPress={() => canChangeTag && handleTagChange(option.value)}
+                    disabled={!canChangeTag}
+                  >
+                    <Text
+                      style={[
+                        styles.tagText,
+                        isSelected && styles.tagTextSelected,
+                        isDark && styles.tagTextDark,
+                        isSelected && isDark && styles.tagTextSelectedDark,
+                        isGeneral && isSelected && styles.tagTextBold,
+                        !canChangeTag && styles.tagTextDisabled,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         {/* Details Section */}
@@ -279,6 +336,68 @@ const styles = StyleSheet.create({
     color: '#34C759',
     fontSize: 14,
     fontWeight: '600',
+  },
+  tagContainer: {
+    marginTop: 16,
+  },
+  tagLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  tagLabelDark: {
+    color: '#8E8E93',
+  },
+  tagPillsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tagPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#C6C6C8',
+    backgroundColor: '#F2F2F7',
+  },
+  tagPillDark: {
+    borderColor: '#38383A',
+    backgroundColor: '#1C1C1E',
+  },
+  tagPillSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#E3F2FD',
+  },
+  tagPillSelectedDark: {
+    borderColor: '#0A84FF',
+    backgroundColor: '#1C1C1E',
+  },
+  tagPillDisabled: {
+    opacity: 0.5,
+  },
+  tagPillPressed: {
+    opacity: 0.7,
+  },
+  tagText: {
+    fontSize: 15,
+    color: '#000000',
+  },
+  tagTextDark: {
+    color: '#FFFFFF',
+  },
+  tagTextSelected: {
+    color: '#007AFF',
+  },
+  tagTextSelectedDark: {
+    color: '#0A84FF',
+  },
+  tagTextBold: {
+    fontWeight: '600',
+  },
+  tagTextDisabled: {
+    opacity: 0.6,
   },
   detailsSection: {
     flex: 1,

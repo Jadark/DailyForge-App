@@ -21,6 +21,7 @@ import {
   updateNotificationsOnGoalComplete,
   updateNotificationsOnGoalSet,
 } from '@/services/notifications';
+import { GoalTag } from '@/types';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -108,8 +109,8 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSetGoal = async (text: string) => {
-    const success = await setGoal(text);
+  const handleSetGoal = async (text: string, tag: GoalTag) => {
+    const success = await setGoal(text, tag);
     if (success) {
       // Cancel morning reminder since goal is now set
       await updateNotificationsOnGoalSet();

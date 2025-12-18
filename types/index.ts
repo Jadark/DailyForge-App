@@ -17,12 +17,15 @@ export interface GoalDetail {
 
 export type GoalStatus = 'in_progress' | 'completed';
 
+export type GoalTag = 'general' | 'personal_health' | 'work_school';
+
 export interface Goal {
   id: string;
   text: string;
   date: string; // YYYY-MM-DD in local timezone
   status: GoalStatus;
   details: GoalDetail[];
+  tag?: GoalTag; // Tag for categorizing the goal (optional for backward compatibility)
   createdAt: string; // ISO 8601 timestamp
   completedAt?: string; // ISO 8601 timestamp, set when completed
 }
@@ -37,6 +40,12 @@ export interface Stats {
   totalCompleted: number;
   /** Date of last completion in YYYY-MM-DD format */
   lastCompletedDate: string | null;
+  /** Tag counts for metadata tracking */
+  tagCounts: {
+    general: number;
+    personal_health: number;
+    work_school: number;
+  };
 }
 
 // ============================================================

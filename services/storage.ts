@@ -6,12 +6,12 @@
  */
 
 import {
-    AppState,
-    DailyRecord,
-    Goal,
-    Stats,
-    STORAGE_KEYS,
-    UserProfile,
+  AppState,
+  DailyRecord,
+  Goal,
+  Stats,
+  STORAGE_KEYS,
+  UserProfile,
 } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -87,11 +87,26 @@ const DEFAULT_STATS: Stats = {
   longestStreak: 0,
   totalCompleted: 0,
   lastCompletedDate: null,
+  tagCounts: {
+    general: 0,
+    personal_health: 0,
+    work_school: 0,
+  },
 };
 
 export async function getStats(): Promise<Stats> {
   const stats = await getItem<Stats>(STORAGE_KEYS.STATS);
-  return stats ?? DEFAULT_STATS;
+  if (!stats) {
+    return DEFAULT_STATS;
+  }
+  // Ensure tagCounts exists for backward compatibility
+  if (!stats.tagCounts) {
+    return {
+      ...stats,
+      tagCounts: DEFAULT_STATS.tagCounts,
+    };
+  }
+  return stats;
 }
 
 export async function setStats(stats: Stats): Promise<boolean> {
