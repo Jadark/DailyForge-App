@@ -5,15 +5,15 @@
  * Provides type-safe get/set operations with error handling.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  STORAGE_KEYS,
-  Goal,
-  Stats,
-  UserProfile,
-  AppState,
-  DailyRecord,
+    AppState,
+    DailyRecord,
+    Goal,
+    Stats,
+    STORAGE_KEYS,
+    UserProfile,
 } from '@/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ============================================================
 // Generic Storage Operations
@@ -105,6 +105,7 @@ export async function setStats(stats: Stats): Promise<boolean> {
 const DEFAULT_APP_STATE: AppState = {
   isOnboardingComplete: false,
   lastOpenedDate: null,
+  notificationsEnabled: true, // Default to enabled
 };
 
 export async function getAppState(): Promise<AppState> {

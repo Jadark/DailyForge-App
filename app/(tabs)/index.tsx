@@ -174,15 +174,15 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Stats (Current Streak) */}
-        {stats.currentStreak > 0 && (
+        {/* Stats */}
+        {(stats.currentStreak > 0 || stats.longestStreak > 0 || stats.totalCompleted > 0) && (
           <View style={styles.statsContainer}>
-            <View style={[styles.statBadge, isDark && styles.statBadgeDark]}>
-              <Text style={styles.streakIcon}>🔥</Text>
-              <Text style={[styles.streakText, isDark && styles.streakTextDark]}>
-                {stats.currentStreak} day{stats.currentStreak !== 1 ? 's' : ''} streak
-              </Text>
-            </View>
+            <Text style={[styles.statsText, isDark && styles.statsTextDark]}>
+              Current Streak: {stats.currentStreak} | Highest Streak: {stats.longestStreak}
+            </Text>
+            <Text style={[styles.statsText, isDark && styles.statsTextDark]}>
+              Total Goals Completed: {stats.totalCompleted}
+            </Text>
           </View>
         )}
 
@@ -280,28 +280,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  statBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    gap: 6,
-  },
-  statBadgeDark: {
-    backgroundColor: '#3D2A1A',
-  },
-  streakIcon: {
-    fontSize: 16,
-  },
-  streakText: {
+  statsText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#E65100',
+    fontWeight: '500',
+    color: '#8E8E93',
+    textAlign: 'center',
   },
-  streakTextDark: {
-    color: '#FFB74D',
+  statsTextDark: {
+    color: '#8E8E93',
   },
   eolContainer: {
     alignItems: 'center',

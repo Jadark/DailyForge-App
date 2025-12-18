@@ -65,6 +65,7 @@ export interface UserProfile {
 export interface AppState {
   isOnboardingComplete: boolean;
   lastOpenedDate: string | null; // YYYY-MM-DD, for rollover detection
+  notificationsEnabled: boolean; // User preference for notifications
 }
 
 // ============================================================

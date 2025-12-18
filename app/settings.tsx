@@ -4,18 +4,21 @@
  * Allows users to edit their name.
  */
 
-import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  Pressable,
-  Alert,
-} from 'react-native';
-import { router } from 'expo-router';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { cancelAllNotifications, initializeNotifications } from '@/services/notifications';
+import { getAppState, setAppState } from '@/services/storage';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import {
+    Alert,
+    Pressable,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -23,12 +26,24 @@ export default function SettingsScreen() {
   const { profile, updateName } = useUserProfile();
   
   const [name, setName] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.name) {
-      setName(profile.name);
-    }
+    const loadSettings = async () => {
+      setIsLoading(true);
+      if (profile?.name) {
+        setName(profile.name);
+      }
+      
+      // Load notification preference
+      const appState = await getAppState();
+      setNotificationsEnabled(appState.notificationsEnabled ?? true);
+      setIsLoading(false);
+    };
+    
+    loadSettings();
   }, [profile?.name]);
 
   const handleSave = async () => {
@@ -39,13 +54,51 @@ export default function SettingsScreen() {
     }
 
     setIsSaving(true);
-    const success = await updateName(trimmed);
+    
+    // Update name
+    const nameSuccess = await updateName(trimmed);
+    
+    // Update notification preference
+    const appState = await getAppState();
+    const notificationSuccess = await setAppState({
+      ...appState,
+      notificationsEnabled,
+    });
+    
+    // Update notifications based on preference
+    if (notificationsEnabled) {
+      // Re-initialize notifications if enabled
+      await initializeNotifications(false, false, 0);
+    } else {
+      // Cancel all notifications if disabled
+      await cancelAllNotifications();
+    }
+    
     setIsSaving(false);
 
-    if (success) {
+    if (nameSuccess && notificationSuccess) {
       router.back();
     } else {
       Alert.alert('Error', 'Failed to save. Please try again.');
+    }
+  };
+
+  const handleNotificationToggle = async (value: boolean) => {
+    setNotificationsEnabled(value);
+    
+    // Immediately update notifications
+    const appState = await getAppState();
+    await setAppState({
+      ...appState,
+      notificationsEnabled: value,
+    });
+    
+    if (value) {
+      // Re-initialize notifications if enabled
+      await initializeNotifications(false, false, 0);
+    } else {
+      // Cancel all notifications if disabled
+      await cancelAllNotifications();
     }
   };
 
@@ -94,6 +147,28 @@ export default function SettingsScreen() {
               autoCapitalize="words"
               autoCorrect={false}
               maxLength={30}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.section, isDark && styles.sectionDark]}>
+          <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+            NOTIFICATIONS
+          </Text>
+          <View style={[styles.toggleRow, isDark && styles.toggleRowDark]}>
+            <Text style={[styles.toggleLabel, isDark && styles.toggleLabelDark]}>
+              Enable Notifications
+            </Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleNotificationToggle}
+              trackColor={{
+                false: isDark ? '#3A3A3C' : '#E5E5EA',
+                true: isDark ? '#34C759' : '#34C759',
+              }}
+              thumbColor={isDark ? '#FFFFFF' : '#FFFFFF'}
+              ios_backgroundColor={isDark ? '#3A3A3C' : '#E5E5EA'}
+              disabled={isLoading}
             />
           </View>
         </View>
@@ -194,6 +269,24 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   inputDark: {
+    color: '#FFFFFF',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleRowDark: {
+    backgroundColor: '#1C1C1E',
+  },
+  toggleLabel: {
+    fontSize: 17,
+    color: '#000000',
+  },
+  toggleLabelDark: {
     color: '#FFFFFF',
   },
 });

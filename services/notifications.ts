@@ -7,8 +7,11 @@
  * - 8:30 PM: Contextual based on goal state and streak (TBD logic)
  */
 
+import { getRandomEveningCongratulations } from '@/data/default-evening-congratulations';
+import { getRandomMiddayAffirmation } from '@/data/default-midday-affirmations';
 import { getMOTDByDayOfYear } from '@/data/default-motd';
 import { getDayOfYear } from '@/services/date-utils';
+import { getAppState } from '@/services/storage';
 import * as Notifications from 'expo-notifications';
 
 // Configure notification behavior
@@ -104,15 +107,23 @@ export async function scheduleMorningReminder(hasGoalSet: boolean = false): Prom
 // ============================================================
 
 export async function scheduleAfternoonReinforcement(): Promise<void> {
+  // Check if notifications are enabled
+  const appState = await getAppState();
+  if (!appState.notificationsEnabled) {
+    return;
+  }
+
   // Cancel existing
   await cancelNotification(NOTIFICATION_IDS.AFTERNOON_REINFORCEMENT);
 
-  // Placeholder content - will be customized based on goal state
+  // Get a random midday affirmation
+  const affirmation = getRandomMiddayAffirmation();
+
   await Notifications.scheduleNotificationAsync({
     identifier: NOTIFICATION_IDS.AFTERNOON_REINFORCEMENT,
     content: {
-      title: 'Keep going! 💪',
-      body: "You're making progress. Stay focused on your goal.",
+      title: affirmation,
+      body: '', // Just the affirmation as the title
       sound: 'default',
     },
     trigger: {
@@ -132,29 +143,41 @@ export async function scheduleEveningContextual(
   isCompleted: boolean = false,
   currentStreak: number = 0
 ): Promise<void> {
+  // Check if notifications are enabled
+  const appState = await getAppState();
+  if (!appState.notificationsEnabled) {
+    return;
+  }
+
   // Cancel existing
   await cancelNotification(NOTIFICATION_IDS.EVENING_CONTEXTUAL);
 
   let title: string;
-  let body: string;
+  let body: string = '';
 
-  if (isCompleted) {
-    // Goal completed
-    if (currentStreak > 1) {
-      title = `${currentStreak} day streak! 🔥`;
-      body = 'Great work today. See you tomorrow.';
+  // Milestone streak days (special celebrations)
+  const milestoneStreaks = [7, 14, 21, 35, 60, 90, 120, 180, 240, 300, 365];
+
+  if (!hasGoalSet || !isCompleted) {
+    // Goal is not set OR not completed
+    if (currentStreak < 7) {
+      title = 'You still have time to complete your goal for today';
     } else {
-      title = 'Goal complete! ✓';
-      body = 'Well done. Rest up and come back tomorrow.';
+      title = 'You still have time to complete your goal today and keep that streak going';
     }
-  } else if (hasGoalSet) {
-    // Goal set but not completed
-    title = 'Still time today';
-    body = "Don't forget to complete your goal before midnight.";
+  } else if (isCompleted) {
+    // Goal is completed
+    if (currentStreak === 3) {
+      title = 'Congratulations! You have completed your goal 3 days in a row!';
+    } else if (milestoneStreaks.includes(currentStreak)) {
+      title = `Congratulations! You have completed your goal ${currentStreak} days in a row!`;
+    } else {
+      // Random congratulatory message
+      title = getRandomEveningCongratulations();
+    }
   } else {
-    // No goal set
-    title = 'Day almost over';
-    body = 'There\'s still time to set and complete a quick goal.';
+    // Fallback (shouldn't reach here, but just in case)
+    title = 'Great work today!';
   }
 
   await Notifications.scheduleNotificationAsync({
@@ -197,6 +220,14 @@ export async function initializeNotifications(
   isCompleted: boolean = false,
   currentStreak: number = 0
 ): Promise<void> {
+  // Check if notifications are enabled in app settings
+  const appState = await getAppState();
+  
+  if (!appState.notificationsEnabled) {
+    console.log('[Notifications] Notifications disabled by user preference');
+    return;
+  }
+
   const hasPermission = await getNotificationPermissionStatus();
   
   if (hasPermission !== 'granted') {
@@ -217,11 +248,23 @@ export async function initializeNotifications(
 // ============================================================
 
 export async function updateNotificationsOnGoalSet(): Promise<void> {
+  // Check if notifications are enabled
+  const appState = await getAppState();
+  if (!appState.notificationsEnabled) {
+    return;
+  }
+
   // Cancel morning reminder since goal is now set
   await cancelNotification(NOTIFICATION_IDS.MORNING_REMINDER);
 }
 
 export async function updateNotificationsOnGoalComplete(currentStreak: number): Promise<void> {
+  // Check if notifications are enabled
+  const appState = await getAppState();
+  if (!appState.notificationsEnabled) {
+    return;
+  }
+
   // Update evening notification with completion message
   await scheduleEveningContextual(true, true, currentStreak);
 }
