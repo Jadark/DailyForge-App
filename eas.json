@@ -17,10 +17,13 @@
       }
     },
     "production": {
-      "ios": {
-        "simulator": false
-      }
-    }
+  "ios": {
+    "simulator": false
+  },
+  "android": {
+    "buildType": "app-bundle"
+  }
+}
   },
   "submit": {
     "production": {}
