@@ -1,7 +1,7 @@
 # DailyForge Migration Summary
 
 **Date:** Current Session  
-**Status:** Core Functionality Complete, Ready for Testing  
+**Status:** Core Functionality Complete + Tagging Feature Added  
 **Next Steps:** Theme system, IAP integration, History view
 
 ---
@@ -34,7 +34,8 @@ All behavioral specifications are in `/docs`:
 ### Phase 1: Foundation ✅
 - **TypeScript Types** (`types/index.ts`)
   - `Goal`, `GoalDetail`, `GoalStatus`
-  - `Stats` (currentStreak, longestStreak, totalCompleted, lastCompletedDate)
+  - `GoalTag` ('general', 'personal_health', 'work_school')
+  - `Stats` (currentStreak, longestStreak, totalCompleted, lastCompletedDate, tagCounts)
   - `UserProfile` (name, createdAt)
   - `AppState` (isOnboardingComplete, lastOpenedDate, notificationsEnabled)
   - `DailyRecord` (for history/archiving)
@@ -98,14 +99,17 @@ All behavioral specifications are in `/docs`:
 
 ### Phase 5: Goal & Stats Management ✅
 - **useDailyGoal Hook** (`hooks/use-daily-goal.ts`)
-  - Set goal for today
+  - Set goal for today (with optional tag, defaults to 'general')
+  - Update tag (only if goal is in progress and from today)
   - Mark complete / mark not complete
   - Add detail (append-only)
   - Check rollover and archive previous day's goal
+  - Increments tag counts on rollover
   - Validates goal is from today
 
 - **useStats Hook** (`hooks/use-stats.ts`)
   - Track current streak, longest streak, total completed
+  - Track tag counts (general, personal_health, work_school) as metadata
   - Record completion (increments streak if consecutive)
   - Revert completion (when marking not complete)
   - Updates longestStreak when current streak exceeds it
@@ -141,6 +145,8 @@ All behavioral specifications are in `/docs`:
   - Modal for entering new goal
   - Character limit (200)
   - Save/Cancel buttons
+  - Tag selection with three pill boxes: [General], [Personal/Health], [Work/School]
+  - General is default and appears bold/highlighted when selected
 
 ### Phase 7: Focus View ✅
 - **Focus Modal** (`app/focus-modal.tsx`)
@@ -150,10 +156,12 @@ All behavioral specifications are in `/docs`:
   - **In Progress State:**
     - Can add new details (append-only)
     - Cannot edit existing details or goal
+    - Can change tag (only if goal is from today)
     - Input field stays visible above keyboard
   - **Completed State:**
-    - Read-only view
+    - Read-only view (including tag)
     - "Mark Not Complete" button to revert state
+  - Tag selection with three pill boxes (disabled when completed or day rolled over)
   - Details show timestamp
   - Keyboard handling with SafeAreaView and KeyboardAvoidingView
   - Loading state while goal data loads
@@ -162,9 +170,33 @@ All behavioral specifications are in `/docs`:
 - **Rollover Logic** (in `useDailyGoal`)
   - Checks on app open and screen focus
   - Archives previous day's goal to daily records
+  - Increments tag count for archived goal's tag (or 'general' if no tag)
+  - Tag count increments regardless of completion status
   - Clears current goal if from previous day
   - Updates last opened date
   - MOTD automatically updates (deterministic by day)
+  - If app closed at midnight: tag count increments on next app open using last saved tag state
+
+### Phase 10: Goal Tagging Feature ✅
+- **Tag System** (`types/index.ts`, `hooks/use-daily-goal.ts`)
+  - Three tag categories: General (default), Personal/Health, Work/School
+  - Tag stored with goal immediately when selected
+  - Tag can be changed in focus modal (only if goal is in progress and from today)
+  - Tag locked once day rolls over or goal is completed
+  - Tag counts tracked in Stats as metadata (not displayed yet)
+  
+- **Tag Selection UI**
+  - Three pill boxes in goal input modal below text input
+  - General tag is default and appears bold/highlighted when selected
+  - Tag selection in focus modal with same pill box design
+  - Tag selection disabled when goal is completed or day has rolled over
+  
+- **Tag Counting Logic**
+  - Tag count increments on day rollover (when previous day's goal is archived)
+  - Increments based on goal's tag at time of rollover
+  - If no tag set, defaults to 'general' and increments that count
+  - Counts increment even if goal was not completed
+  - Backward compatible: existing goals without tags default to 'general'
 
 ### Phase 9: Notifications ✅
 - **Notification Service** (`services/notifications.ts`)
@@ -257,6 +289,7 @@ dailyforge/
 - ✅ Current streak: Consecutive days with completed goals
 - ✅ Longest streak: Highest streak achieved (never decreases)
 - ✅ Total completed: Total number of goals completed (increments on each completion)
+- ✅ Tag counts: Metadata tracking for general, personal_health, work_school (not displayed yet)
 - ✅ Stats displayed on home screen in two-line format
 
 ### Details/Notes
@@ -343,6 +376,14 @@ dailyforge/
    - Two-line format with pipe separator
    - All stats properly tracked and persisted
 
+5. **Goal Tagging System**
+   - Three tag categories: General (default), Personal/Health, Work/School
+   - Tag selection in goal input modal with pill box UI
+   - Tag can be changed in focus modal (with restrictions)
+   - Tag counts tracked as metadata on day rollover
+   - Tag locked once day rolls over or goal is completed
+   - Backward compatible with existing goals
+
 ---
 
 ## What's Next / TODO
@@ -394,7 +435,13 @@ dailyforge/
 ### Setting a Goal
 ```typescript
 const { setGoal } = useDailyGoal();
-await setGoal("Learn TypeScript generics");
+await setGoal("Learn TypeScript generics", 'work_school'); // tag defaults to 'general'
+```
+
+### Updating a Tag
+```typescript
+const { updateTag } = useDailyGoal();
+await updateTag('personal_health'); // Only works if goal is in progress and from today
 ```
 
 ### Completing a Goal
@@ -435,4 +482,59 @@ When continuing this work:
 5. Theme system and IAP are next major features
 
 **Last Updated:** Current session  
-**Status:** Core functionality complete, all major features implemented, ready for theme system and IAP
+**Status:** Core functionality complete, tagging feature implemented, ready for theme system and IAP
+
+---
+
+## Session Summary: Tagging Feature Implementation
+
+### What Was Added
+A goal tagging system that allows users to categorize their daily goals into three categories: General (default), Personal/Health, and Work/School.
+
+### Implementation Details
+
+1. **Type System Updates**
+   - Added `GoalTag` type with three values: 'general', 'personal_health', 'work_school'
+   - Added optional `tag` field to `Goal` interface (optional for backward compatibility)
+   - Added `tagCounts` object to `Stats` interface to track metadata
+
+2. **UI Components**
+   - **Goal Input Modal**: Added three pill boxes below text input for tag selection
+     - General is default and appears bold/highlighted when selected
+     - Tag is saved immediately when goal is created
+   - **Focus Modal**: Added tag selection UI in goal details section
+     - Tag can be changed only if goal is in progress and from today
+     - Tag selection disabled when goal is completed or day has rolled over
+
+3. **Business Logic**
+   - Tag is stored immediately when selected/changed
+   - Tag can be changed in focus modal (restrictions apply)
+   - Tag is locked once day rolls over or goal is completed
+   - Tag count increments on day rollover (regardless of completion status)
+   - If no tag is set, defaults to 'general' for counting
+
+4. **Rollover Behavior**
+   - When day rolls over, previous day's goal tag count is incremented
+   - If app is open at midnight: rollover happens immediately, locks in current tag
+   - If app is closed at midnight: rollover happens on next app open, commits last saved tag state
+   - Tag counts are metadata only (not displayed in UI yet)
+
+5. **Backward Compatibility**
+   - Existing goals without tags default to 'general'
+   - Stats without tagCounts get default values on load
+   - All tag operations handle missing tags gracefully
+
+### Files Modified
+- `types/index.ts` - Added GoalTag type and tagCounts to Stats
+- `components/goal-input-modal.tsx` - Added tag selection UI
+- `app/focus-modal.tsx` - Added tag selection and change functionality
+- `hooks/use-daily-goal.ts` - Added tag handling and rollover tag counting
+- `services/storage.ts` - Added tagCounts to default Stats
+- `app/(tabs)/index.tsx` - Updated to handle tag parameter
+
+### Testing Notes
+- Tag selection works in goal input modal
+- Tag can be changed in focus modal (with proper restrictions)
+- Tag counts increment correctly on rollover
+- Backward compatibility verified for existing goals
+- All linting passes

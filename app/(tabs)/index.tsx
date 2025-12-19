@@ -8,6 +8,7 @@
  * - Current streak
  */
 
+import { CelebrationEffect, CelebrationType } from '@/components/celebration-effect';
 import { GoalCard } from '@/components/goal-card';
 import { GoalInputModal } from '@/components/goal-input-modal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -53,6 +54,10 @@ export default function HomeScreen() {
 
   const [showGoalInput, setShowGoalInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Celebration effect type - defaults to 'confetti' (original behavior)
+  // Users will see confetti when completing goals
+  const [celebrationType, setCelebrationType] = useState<CelebrationType>('confetti');
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Check for day rollover on mount and focus
   useFocusEffect(
@@ -106,6 +111,8 @@ export default function HomeScreen() {
       await recordCompletion();
       // Update notifications for completion
       await updateNotificationsOnGoalComplete(stats.currentStreak + 1);
+      // Trigger celebration effect
+      setShowCelebration(true);
     }
   };
 
@@ -205,6 +212,14 @@ export default function HomeScreen() {
         visible={showGoalInput}
         onClose={() => setShowGoalInput(false)}
         onSubmit={handleSetGoal}
+      />
+
+      {/* Celebration Effect */}
+      <CelebrationEffect
+        type={celebrationType}
+        visible={showCelebration}
+        onComplete={() => setShowCelebration(false)}
+        duration={4000}
       />
     </SafeAreaView>
   );
